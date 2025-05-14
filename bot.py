@@ -47,3 +47,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    bot.set_webhook(url='https://your-webhook-url.com')
