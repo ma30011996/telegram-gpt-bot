@@ -1,3 +1,4 @@
+bot.remove_webhook()
 import logging
 import requests
 from telegram import Update
