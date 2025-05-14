@@ -1,44 +1,66 @@
 import os
+import requests
 from flask import Flask, request
 import telegram
-import requests
 
-TOKEN = os.getenv("BOT_TOKEN")  # Задай переменную окружения с токеном бота
-bot = telegram.Bot(token=TOKEN)
+bot = telegram.Bot(token=os.getenv("BOT_TOKEN"))
+OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
 
 app = Flask(__name__)
 
-# Функция генерации изображения
-def generate_image(prompt):
-    url = f"https://image.pollinations.ai/prompt/{prompt}"
-    return url
+# Генерация ответа на вопрос
+def ask_openrouter(prompt):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "openai/gpt-3.5-turbo",
+        "messages": [{"role": "user", "content": prompt}]
+    }
 
-@app.route(f'/{TOKEN}', methods=['POST'])
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        result = response.json()
+        return result['choices'][0]['message']['content']
+    except Exception as e:
+        return f"Ошибка при обращении к OpenRouter: {str(e)}"
+
+# Генерация изображения
+def generate_image(prompt):
+    try:
+        # Бесплатный генератор от Pollinations
+        return f"https://image.pollinations.ai/prompt/{prompt}"
+    except:
+        return None
+
+@app.route(f"/{os.getenv('BOT_TOKEN')}", methods=["POST"])
 def webhook():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
     chat_id = update.message.chat.id
+    message = update.message.text
 
-    if update.message.text.startswith("/image"):
-        prompt = update.message.text.replace("/image", "").strip()
-        if not prompt:
-            bot.send_message(chat_id=chat_id, text="Напиши описание после команды. Пример: /image робот на пляже")
+    if message:
+        if "карт" in message.lower() or "рис" in message.lower() or "нарисуй" in message.lower():
+            # Генерация изображения
+            img_url = generate_image(message)
+            bot.send_photo(chat_id=chat_id, photo=img_url, caption="Вот изображение!")
         else:
-            image_url = generate_image(prompt)
-            bot.send_photo(chat_id=chat_id, photo=image_url, caption=f"Вот изображение по запросу: {prompt}")
-    else:
-        bot.send_message(chat_id=chat_id, text="Используй команду /image чтобы сгенерировать картинку.")
+            # Ответ на вопрос
+            reply = ask_openrouter(message)
+            bot.send_message(chat_id=chat_id, text=reply)
 
-    return 'ok', 200
+    return "ok", 200
 
-@app.route('/')
+@app.route("/")
 def index():
-    return 'бот работает'
+    return "Бот запущен!"
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     render_url = os.getenv("RENDER_EXTERNAL_HOSTNAME")
     if render_url:
-        webhook_url = f"https://{render_url}/{TOKEN}"
-        bot.set_webhook(url=webhook_url)
+        bot.set_webhook(url=f"https://{render_url}/{os.getenv('BOT_TOKEN')}")
 
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
