@@ -24,7 +24,7 @@ def webhook():
         "model": "gpt-3.5-turbo",  # Используй модель, поддерживаемую OpenRouter
         "messages": [{"role": "user", "content": user_message}]
     }
-    response = requests.post("https://api.openrouter.ai/v1/chat/completions", json=data, headers=headers)
+    response = requests.post("https://openrouter.ai/api/v1/chat/completions", json=data, headers=headers)
     openrouter_reply = response.json()['choices'][0]['message']['content']
 
     # Ответ от OpenRouter
