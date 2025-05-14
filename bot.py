@@ -3,8 +3,8 @@ import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-TELEGRAM_TOKEN = "ТВОЙ_TELEGRAM_ТОКЕН"
-OPENROUTER_API_KEY = "ТВОЙ_OPENROUTER_API_КЛЮЧ"
+TELEGRAM_TOKEN = "7949631115:AAFnrJ5u6Ipn4zje8LE2xxp66vOQ7wFPj40"
+OPENROUTER_API_KEY = "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"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Я GPT-бот. Напиши мне что-нибудь.")
