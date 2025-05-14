@@ -1,52 +1,29 @@
-bot.set_webhook(url="https://your-app-name.onrender.com/your-webhook-path")
-bot.remove_webhook()
-import logging
-import requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+import os
+from flask import Flask, request
+import telegram
 
-TELEGRAM_TOKEN = "7949631115:AAGlmQs-qdv33QWV7mgQuAkDD1EdC0RGVvU"
-OPENROUTER_API_KEY = "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"
+TOKEN = os.getenv("7949631115:AAGlmQs-qdv33QWV7mgQuAkDD1EdC0RGVvU")
+bot = telegram.Bot(token=TOKEN)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Я GPT-бот. Напиши мне что-нибудь.")
+app = Flask(__name__)
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
-    reply = await get_gpt_reply(user_message)
-    await update.message.reply_text(reply)
+@app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+    update = telegram.Update.de_json(request.get_json(force=True), bot)
+    chat_id = update.message.chat.id
+    message = update.message.text
+    bot.send_message(chat_id=chat_id, text=f"Ты написал: {message}")
+    return 'ok', 200
 
-async def get_gpt_reply(prompt: str) -> str:
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://yourdomain.com",
-        "X-Title": "TelegramGPTBot"
-    }
-    data = {
-        "model": "openchat/openchat-3.5",  # Бесплатная модель
-        "messages": [{"role": "user", "content": prompt}]
-    }
+@app.route('/')
+def index():
+    return 'бот работает'
 
-    response = requests.post(url, headers=headers, json=data)
-    if response.status_code == 200:
-        content = response.json()["choices"][0]["message"]["content"]
-        return content.strip()
-    else:
-        return "Произошла ошибка при обращении к модели."
+if __name__ == '__main__':
+    render_url = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+    if render_url:
+        webhook_url = f"https://{render_url}/{TOKEN}"
+        bot.set_webhook(url=webhook_url)
 
-def main():
-    logging.basicConfig(level=logging.INFO)
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    print("Бот запущен. Нажми Ctrl+C для остановки.")
-    app.run_polling()
-    bot.remove_webhook()
-
-if __name__ == "__main__":
-    main()
-    bot.set_webhook(url='https://your-webhook-url.com')
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
