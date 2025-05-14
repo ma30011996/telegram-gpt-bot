@@ -1,51 +1,43 @@
 import os
-import requests
 from flask import Flask, request
 import telegram
+import requests
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+TOKEN = os.getenv("BOT_TOKEN")  # Задай переменную окружения с токеном бота
+bot = telegram.Bot(token=TOKEN)
 
-bot = telegram.Bot(token=TELEGRAM_TOKEN)
 app = Flask(__name__)
 
-@app.route(f'/{TELEGRAM_TOKEN}', methods=['POST'])
+# Функция генерации изображения
+def generate_image(prompt):
+    url = f"https://image.pollinations.ai/prompt/{prompt}"
+    return url
+
+@app.route(f'/{TOKEN}', methods=['POST'])
 def webhook():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
     chat_id = update.message.chat.id
-    user_message = update.message.text
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "model": "openai/gpt-3.5-turbo",
-        "messages": [{"role": "user", "content": user_message}]
-    }
-
-    try:
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", json=data, headers=headers)
-        response_json = response.json()
-
-        if 'choices' in response_json:
-            reply = response_json['choices'][0]['message']['content']
+    if update.message.text.startswith("/image"):
+        prompt = update.message.text.replace("/image", "").strip()
+        if not prompt:
+            bot.send_message(chat_id=chat_id, text="Напиши описание после команды. Пример: /image робот на пляже")
         else:
-            reply = "Ошибка: " + str(response_json.get("error", "Неизвестная ошибка"))
-    except Exception as e:
-        reply = f"Произошла ошибка при обращении к OpenRouter: {str(e)}"
+            image_url = generate_image(prompt)
+            bot.send_photo(chat_id=chat_id, photo=image_url, caption=f"Вот изображение по запросу: {prompt}")
+    else:
+        bot.send_message(chat_id=chat_id, text="Используй команду /image чтобы сгенерировать картинку.")
 
-    bot.send_message(chat_id=chat_id, text=reply)
     return 'ok', 200
 
 @app.route('/')
 def index():
-    return 'Бот работает.'
+    return 'бот работает'
 
 if __name__ == '__main__':
     render_url = os.getenv("RENDER_EXTERNAL_HOSTNAME")
     if render_url:
-        webhook_url = f"https://{render_url}/{TELEGRAM_TOKEN}"
+        webhook_url = f"https://{render_url}/{TOKEN}"
         bot.set_webhook(url=webhook_url)
 
     port = int(os.environ.get("PORT", 5000))
