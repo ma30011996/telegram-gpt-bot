@@ -43,6 +43,7 @@ def main():
 
     print("Бот запущен. Нажми Ctrl+C для остановки.")
     app.run_polling()
+    bot.remove_webhook()
 
 if __name__ == "__main__":
     main()
