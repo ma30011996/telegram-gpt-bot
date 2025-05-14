@@ -15,25 +15,32 @@ def webhook():
     chat_id = update.message.chat.id
     user_message = update.message.text
 
-    # Запрос к OpenRouter API
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
     data = {
-        "model": "gpt-3.5-turbo",  # Используй модель, поддерживаемую OpenRouter
+        "model": "openai/gpt-3.5-turbo",
         "messages": [{"role": "user", "content": user_message}]
     }
-    response = requests.post("https://openrouter.ai/api/v1/chat/completions", json=data, headers=headers)
-    openrouter_reply = response.json()['choices'][0]['message']['content']
 
-    # Ответ от OpenRouter
-    bot.send_message(chat_id=chat_id, text=openrouter_reply)
+    try:
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", json=data, headers=headers)
+        response_json = response.json()
+
+        if 'choices' in response_json:
+            reply = response_json['choices'][0]['message']['content']
+        else:
+            reply = "Ошибка: " + str(response_json.get("error", "Неизвестная ошибка"))
+    except Exception as e:
+        reply = f"Произошла ошибка при обращении к OpenRouter: {str(e)}"
+
+    bot.send_message(chat_id=chat_id, text=reply)
     return 'ok', 200
 
 @app.route('/')
 def index():
-    return 'бот работает'
+    return 'Бот работает.'
 
 if __name__ == '__main__':
     render_url = os.getenv("RENDER_EXTERNAL_HOSTNAME")
