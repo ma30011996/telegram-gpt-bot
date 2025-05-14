@@ -1,3 +1,4 @@
+bot.set_webhook(url="https://your-app-name.onrender.com/your-webhook-path")
 bot.remove_webhook()
 import logging
 import requests
