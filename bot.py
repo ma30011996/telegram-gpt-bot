@@ -1,52 +1,32 @@
 import os
-import requests
-import telegram
-import replicate
 from flask import Flask, request
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
+import telegram
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import replicate
 
+# Инициализация
 bot = telegram.Bot(token=os.getenv("BOT_TOKEN"))
-REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
-OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
-
-replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
+replicate_client = replicate.Client(api_token=os.getenv("REPLICATE_API_TOKEN"))
 app = Flask(__name__)
-
 last_prompts = {}
 
-# Генерация текста через OpenRouter (ChatGPT)
-def ask_openrouter(prompt):
-    print(f"[LOG] GPT запрос: {prompt}")
-    try:
-        url = "https://openrouter.ai/api/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_KEY}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "model": "openai/gpt-3.5-turbo",
-            "messages": [{"role": "user", "content": prompt}]
-        }
-        response = requests.post(url, headers=headers, json=data)
-        result = response.json()
-        return result['choices'][0]['message']['content']
-    except Exception as e:
-        print(f"[ERROR] Ошибка GPT: {str(e)}")
-        return "Ошибка при обращении к ChatGPT."
-
-# Генерация изображения через Replicate
+# Генерация изображения
 def generate_image(prompt):
-    print(f"[LOG] Генерация изображения: {prompt}")
     try:
+        print(f"[LOG] Генерация изображения: {prompt}")
         output = replicate_client.run(
             "stability-ai/sdxl:latest",
             input={"prompt": prompt}
         )
-        print(f"[LOG] Ссылка на изображение: {output[0]}")
         return output[0]
     except Exception as e:
-        print(f"[ERROR] Ошибка генерации изображения: {str(e)}")
+        print(f"[ERROR] {str(e)}")
         return None
+
+# Отправка изображения с кнопкой
+def send_image(chat_id, image_url):
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Сгенерировать ещё", callback_data="more")]])
+    bot.send_photo(chat_id=chat_id, photo=image_url, caption="Готово!", reply_markup=keyboard)
 
 @app.route(f"/{os.getenv('BOT_TOKEN')}", methods=["POST"])
 def webhook():
@@ -54,61 +34,44 @@ def webhook():
 
     if update.message:
         chat_id = update.message.chat.id
-        message = update.message.text.strip()
-        print(f"[LOG] Сообщение от {chat_id}: {message}")
+        message = update.message.text
 
-        if any(word in message.lower() for word in ["карт", "рис", "нарисуй"]):
+        if message.lower().startswith("/start"):
+            bot.send_message(chat_id=chat_id, text="Привет! Напиши, что нарисовать.")
+        elif any(x in message.lower() for x in ["рис", "карт", "нарисуй"]):
             image_url = generate_image(message)
             if image_url:
                 last_prompts[chat_id] = message
-                send_image_with_button(chat_id, image_url)
+                send_image(chat_id, image_url)
             else:
-                bot.send_message(chat_id=chat_id, text="Ошибка генерации изображения.",
-                                 reply_markup=ReplyKeyboardRemove())
+                bot.send_message(chat_id=chat_id, text="Ошибка генерации.")
         else:
-            reply = ask_openrouter(message)
-            bot.send_message(chat_id=chat_id, text=reply, reply_markup=ReplyKeyboardRemove())
+            bot.send_message(chat_id=chat_id, text="Хочешь картинку? Напиши, что нарисовать.")
 
     elif update.callback_query:
         chat_id = update.callback_query.message.chat.id
-        data = update.callback_query.data
-        if data == "more":
-            if chat_id in last_prompts:
-                prompt = last_prompts[chat_id]
-                bot.answer_callback_query(update.callback_query.id, text="Генерирую ещё...")
-                image_url = generate_image(prompt)
-                if image_url:
-                    send_image_with_button(chat_id, image_url)
-                else:
-                    bot.send_message(chat_id=chat_id, text="Не удалось сгенерировать новое изображение.",
-                                     reply_markup=ReplyKeyboardRemove())
+        prompt = last_prompts.get(chat_id)
+        if prompt:
+            bot.send_message(chat_id=chat_id, text="Генерирую ещё...")
+            image_url = generate_image(prompt)
+            if image_url:
+                send_image(chat_id, image_url)
             else:
-                bot.send_message(chat_id=chat_id, text="Я не помню, что ты просил нарисовать.",
-                                 reply_markup=ReplyKeyboardRemove())
+                bot.send_message(chat_id=chat_id, text="Ошибка генерации.")
+        else:
+            bot.send_message(chat_id=chat_id, text="Я не помню, что ты просил.")
 
     return "ok", 200
 
-def send_image_with_button(chat_id, image_url):
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Сгенерировать ещё", callback_data="more")]
-    ])
-    bot.send_photo(chat_id=chat_id, photo=image_url, caption="Готово!", reply_markup=keyboard)
-
 @app.route("/")
-def index():
+def home():
     return "Бот работает!"
 
 if __name__ == "__main__":
-    render_url = os.getenv("RENDER_EXTERNAL_HOSTNAME")
-    if render_url:
-        bot.set_webhook(url=f"https://{render_url}/{os.getenv('BOT_TOKEN')}")
-        print("[LOG] Webhook установлен")
-        bot.delete_my_commands()
-        print("[LOG] Команды бота сброшены")
-
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
-
+    url = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+    if url:
+        bot.set_webhook(f"https://{url}/{os.getenv('BOT_TOKEN')}")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
 
 
