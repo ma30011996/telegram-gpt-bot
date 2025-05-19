@@ -1,66 +1,86 @@
-import os
+
+    import os
 import requests
-from flask import Flask, request
 import telegram
+import replicate
+from flask import Flask, request
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 bot = telegram.Bot(token=os.getenv("BOT_TOKEN"))
-OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 
+replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
 app = Flask(__name__)
 
-# Генерация ответа на вопрос
-def ask_openrouter(prompt):
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "model": "openai/gpt-3.5-turbo",
-        "messages": [{"role": "user", "content": prompt}]
-    }
+# Словарь для запоминания последних запросов
+last_prompts = {}
 
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        result = response.json()
-        return result['choices'][0]['message']['content']
-    except Exception as e:
-        return f"Ошибка при обращении к OpenRouter: {str(e)}"
-
-# Генерация изображения
+# Генерация изображения через Replicate (Stable Diffusion)
 def generate_image(prompt):
+    print(f"[LOG] Генерация изображения: {prompt}")
     try:
-        # Бесплатный генератор от Pollinations
-        return f"https://image.pollinations.ai/prompt/{prompt}"
-    except:
+        output = replicate_client.run(
+            "stability-ai/sdxl:latest",
+            input={"prompt": prompt}
+        )
+        print(f"[LOG] Ссылка на изображение: {output[0]}")
+        return output[0]  # URL изображения
+    except Exception as e:
+        print(f"[ERROR] Ошибка генерации изображения: {str(e)}")
         return None
 
+# Обработка команды Webhook
 @app.route(f"/{os.getenv('BOT_TOKEN')}", methods=["POST"])
 def webhook():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
-    chat_id = update.message.chat.id
-    message = update.message.text
 
-    if message:
-        if "карт" in message.lower() or "рис" in message.lower() or "нарисуй" in message.lower():
-            # Генерация изображения
-            img_url = generate_image(message)
-            bot.send_photo(chat_id=chat_id, photo=img_url, caption="Вот изображение!")
+    if update.message:
+        chat_id = update.message.chat.id
+        message = update.message.text
+
+        print(f"[LOG] Получено сообщение от {chat_id}: {message}")
+
+        if any(word in message.lower() for word in ["карт", "рис", "нарисуй"]):
+            image_url = generate_image(message)
+            if image_url:
+                last_prompts[chat_id] = message  # Сохраняем запрос
+                send_image_with_button(chat_id, image_url)
+            else:
+                bot.send_message(chat_id=chat_id, text="Ошибка генерации изображения.")
         else:
-            # Ответ на вопрос
-            reply = ask_openrouter(message)
-            bot.send_message(chat_id=chat_id, text=reply)
+            bot.send_message(chat_id=chat_id, text="Напиши, что нарисовать!")
+
+    elif update.callback_query:
+        chat_id = update.callback_query.message.chat.id
+        if chat_id in last_prompts:
+            prompt = last_prompts[chat_id]
+            bot.send_message(chat_id=chat_id, text="Генерирую ещё...")
+            image_url = generate_image(prompt)
+            if image_url:
+                send_image_with_button(chat_id, image_url)
+            else:
+                bot.send_message(chat_id=chat_id, text="Не удалось сгенерировать новое изображение.")
+        else:
+            bot.send_message(chat_id=chat_id, text="Я не помню, что ты просил нарисовать.")
 
     return "ok", 200
 
+# Отправка изображения с кнопкой "Сгенерировать ещё"
+def send_image_with_button(chat_id, image_url):
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Сгенерировать ещё", callback_data="more")]
+    ])
+    bot.send_photo(chat_id=chat_id, photo=image_url, caption="Готово!", reply_markup=keyboard)
+
 @app.route("/")
 def index():
-    return "Бот запущен!"
+    return "Бот работает!"
 
 if __name__ == "__main__":
     render_url = os.getenv("RENDER_EXTERNAL_HOSTNAME")
     if render_url:
         bot.set_webhook(url=f"https://{render_url}/{os.getenv('BOT_TOKEN')}")
+        print("[LOG] Webhook установлен")
 
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
