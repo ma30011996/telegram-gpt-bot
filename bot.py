@@ -1,5 +1,5 @@
 
-    import os
+import os
 import requests
 import telegram
 import replicate
@@ -12,10 +12,8 @@ REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
 app = Flask(__name__)
 
-# Словарь для запоминания последних запросов
 last_prompts = {}
 
-# Генерация изображения через Replicate (Stable Diffusion)
 def generate_image(prompt):
     print(f"[LOG] Генерация изображения: {prompt}")
     try:
@@ -24,12 +22,11 @@ def generate_image(prompt):
             input={"prompt": prompt}
         )
         print(f"[LOG] Ссылка на изображение: {output[0]}")
-        return output[0]  # URL изображения
+        return output[0]
     except Exception as e:
         print(f"[ERROR] Ошибка генерации изображения: {str(e)}")
         return None
 
-# Обработка команды Webhook
 @app.route(f"/{os.getenv('BOT_TOKEN')}", methods=["POST"])
 def webhook():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
@@ -37,13 +34,12 @@ def webhook():
     if update.message:
         chat_id = update.message.chat.id
         message = update.message.text
-
         print(f"[LOG] Получено сообщение от {chat_id}: {message}")
 
         if any(word in message.lower() for word in ["карт", "рис", "нарисуй"]):
             image_url = generate_image(message)
             if image_url:
-                last_prompts[chat_id] = message  # Сохраняем запрос
+                last_prompts[chat_id] = message
                 send_image_with_button(chat_id, image_url)
             else:
                 bot.send_message(chat_id=chat_id, text="Ошибка генерации изображения.")
@@ -65,7 +61,6 @@ def webhook():
 
     return "ok", 200
 
-# Отправка изображения с кнопкой "Сгенерировать ещё"
 def send_image_with_button(chat_id, image_url):
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("Сгенерировать ещё", callback_data="more")]
