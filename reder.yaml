@@ -9,4 +9,4 @@ services:
       - key: TELEGRAM_TOKEN
         value: 7949631115:AAGlmQs-qdv33QWV7mgQuAkDD1EdC0RGVvU
       - key: OPENROUTER_API_KEY
-        value:
+        value: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
