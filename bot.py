@@ -1,4 +1,5 @@
 import os
+import requests
 import telegram
 import replicate
 from flask import Flask, request
@@ -6,12 +7,34 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRe
 
 bot = telegram.Bot(token=os.getenv("BOT_TOKEN"))
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
+OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
 
 replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
 app = Flask(__name__)
 
 last_prompts = {}
 
+# Генерация текста через OpenRouter (ChatGPT)
+def ask_openrouter(prompt):
+    print(f"[LOG] GPT запрос: {prompt}")
+    try:
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_KEY}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "openai/gpt-3.5-turbo",
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        response = requests.post(url, headers=headers, json=data)
+        result = response.json()
+        return result['choices'][0]['message']['content']
+    except Exception as e:
+        print(f"[ERROR] Ошибка GPT: {str(e)}")
+        return "Ошибка при обращении к ChatGPT."
+
+# Генерация изображения через Replicate
 def generate_image(prompt):
     print(f"[LOG] Генерация изображения: {prompt}")
     try:
@@ -31,21 +54,20 @@ def webhook():
 
     if update.message:
         chat_id = update.message.chat.id
-        message = update.message.text
-        print(f"[LOG] Получено сообщение от {chat_id}: {message}")
+        message = update.message.text.strip()
+        print(f"[LOG] Сообщение от {chat_id}: {message}")
 
-        if message:
-            if any(word in message.lower() for word in ["карт", "рис", "нарисуй"]):
-                image_url = generate_image(message)
-                if image_url:
-                    last_prompts[chat_id] = message
-                    send_image_with_button(chat_id, image_url)
-                else:
-                    bot.send_message(chat_id=chat_id, text="Ошибка генерации изображения.",
-                                     reply_markup=ReplyKeyboardRemove())
+        if any(word in message.lower() for word in ["карт", "рис", "нарисуй"]):
+            image_url = generate_image(message)
+            if image_url:
+                last_prompts[chat_id] = message
+                send_image_with_button(chat_id, image_url)
             else:
-                bot.send_message(chat_id=chat_id, text="Напиши, что нарисовать!",
+                bot.send_message(chat_id=chat_id, text="Ошибка генерации изображения.",
                                  reply_markup=ReplyKeyboardRemove())
+        else:
+            reply = ask_openrouter(message)
+            bot.send_message(chat_id=chat_id, text=reply, reply_markup=ReplyKeyboardRemove())
 
     elif update.callback_query:
         chat_id = update.callback_query.message.chat.id
@@ -53,7 +75,7 @@ def webhook():
         if data == "more":
             if chat_id in last_prompts:
                 prompt = last_prompts[chat_id]
-                bot.answer_callback_query(update.callback_query.id, text="Генерирую ещё изображение...")
+                bot.answer_callback_query(update.callback_query.id, text="Генерирую ещё...")
                 image_url = generate_image(prompt)
                 if image_url:
                     send_image_with_button(chat_id, image_url)
@@ -63,8 +85,6 @@ def webhook():
             else:
                 bot.send_message(chat_id=chat_id, text="Я не помню, что ты просил нарисовать.",
                                  reply_markup=ReplyKeyboardRemove())
-        else:
-            bot.answer_callback_query(update.callback_query.id)
 
     return "ok", 200
 
@@ -83,13 +103,15 @@ if __name__ == "__main__":
     if render_url:
         bot.set_webhook(url=f"https://{render_url}/{os.getenv('BOT_TOKEN')}")
         print("[LOG] Webhook установлен")
-
-        # Сбрасываем команды бота, чтобы убрать меню
         bot.delete_my_commands()
         print("[LOG] Команды бота сброшены")
 
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run
+12:00
+
+
+st="0.0.0.0", port=port)(ho
 
 
 
