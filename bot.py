@@ -1,10 +1,8 @@
-
 import os
-import requests
 import telegram
 import replicate
 from flask import Flask, request
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
 
 bot = telegram.Bot(token=os.getenv("BOT_TOKEN"))
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
@@ -31,33 +29,42 @@ def generate_image(prompt):
 def webhook():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
 
+    # Обработка сообщений
     if update.message:
         chat_id = update.message.chat.id
         message = update.message.text
         print(f"[LOG] Получено сообщение от {chat_id}: {message}")
 
-        if any(word in message.lower() for word in ["карт", "рис", "нарисуй"]):
-            image_url = generate_image(message)
-            if image_url:
-                last_prompts[chat_id] = message
-                send_image_with_button(chat_id, image_url)
+        if message:
+            if any(word in message.lower() for word in ["карт", "рис", "нарисуй"]):
+                image_url = generate_image(message)
+                if image_url:
+                    last_prompts[chat_id] = message
+                    send_image_with_button(chat_id, image_url)
+                else:
+                    bot.send_message(chat_id=chat_id, text="Ошибка генерации изображения.",
+                                     reply_markup=ReplyKeyboardRemove())
             else:
-                bot.send_message(chat_id=chat_id, text="Ошибка генерации изображения.")
-        else:
-            bot.send_message(chat_id=chat_id, text="Напиши, что нарисовать!")
+                bot.send_message(chat_id=chat_id, text="Напиши, что нарисовать!",
+                                 reply_markup=ReplyKeyboardRemove())
 
+    # Обработка нажатия кнопки "Сгенерировать ещё"
     elif update.callback_query:
         chat_id = update.callback_query.message.chat.id
-        if chat_id in last_prompts:
-            prompt = last_prompts[chat_id]
-            bot.send_message(chat_id=chat_id, text="Генерирую ещё...")
-            image_url = generate_image(prompt)
-            if image_url:
-                send_image_with_button(chat_id, image_url)
+        data = update.callback_query.data
+        if data == "more":
+            if chat_id in last_prompts:
+                prompt = last_prompts[chat_id]
+                bot.answer_callback_query(update.callback_query.id, text="Генерирую ещё изображение...")
+                image_url = generate_image(prompt)
+                if image_url:
+                    send_image_with_button(chat_id, image_url)
+                else:
+                    bot.send_message(chat_id=chat_id, text="Не удалось сгенерировать новое изображение.")
             else:
-                bot.send_message(chat_id=chat_id, text="Не удалось сгенерировать новое изображение.")
+                bot.send_message(chat_id=chat_id, text="Я не помню, что ты просил нарисовать.")
         else:
-            bot.send_message(chat_id=chat_id, text="Я не помню, что ты просил нарисовать.")
+            bot.answer_callback_query(update.callback_query.id)
 
     return "ok", 200
 
@@ -79,3 +86,11 @@ if __name__ == "__main__":
 
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+11:37
+
+
+
+
+
+
+
