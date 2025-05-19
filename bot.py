@@ -29,7 +29,6 @@ def generate_image(prompt):
 def webhook():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
 
-    # Обработка сообщений
     if update.message:
         chat_id = update.message.chat.id
         message = update.message.text
@@ -48,7 +47,6 @@ def webhook():
                 bot.send_message(chat_id=chat_id, text="Напиши, что нарисовать!",
                                  reply_markup=ReplyKeyboardRemove())
 
-    # Обработка нажатия кнопки "Сгенерировать ещё"
     elif update.callback_query:
         chat_id = update.callback_query.message.chat.id
         data = update.callback_query.data
@@ -60,9 +58,11 @@ def webhook():
                 if image_url:
                     send_image_with_button(chat_id, image_url)
                 else:
-                    bot.send_message(chat_id=chat_id, text="Не удалось сгенерировать новое изображение.")
+                    bot.send_message(chat_id=chat_id, text="Не удалось сгенерировать новое изображение.",
+                                     reply_markup=ReplyKeyboardRemove())
             else:
-                bot.send_message(chat_id=chat_id, text="Я не помню, что ты просил нарисовать.")
+                bot.send_message(chat_id=chat_id, text="Я не помню, что ты просил нарисовать.",
+                                 reply_markup=ReplyKeyboardRemove())
         else:
             bot.answer_callback_query(update.callback_query.id)
 
@@ -84,10 +84,12 @@ if __name__ == "__main__":
         bot.set_webhook(url=f"https://{render_url}/{os.getenv('BOT_TOKEN')}")
         print("[LOG] Webhook установлен")
 
+        # Сбрасываем команды бота, чтобы убрать меню
+        bot.delete_my_commands()
+        print("[LOG] Команды бота сброшены")
+
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-
 
 
 
