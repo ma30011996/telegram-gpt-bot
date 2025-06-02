@@ -1,13 +1,3 @@
-import os
-import requests
-import telegram
-from flask import Flask, request
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
-
-bot = telegram.Bot(token=os.getenv("BOT_TOKEN"))
-app = Flask(__name__)
-OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
-last_prompts = {}
 
 def ask_openrouter(prompt):
     try:
